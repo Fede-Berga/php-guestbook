@@ -73,6 +73,39 @@ The course is divided into 8 versions (Tags). Each represents a milestone in the
 
 ---
 
+## 🔄 How to Navigate Versions
+
+This repository uses **Git Tags** to manage the different stages of the project. This allows you to jump to any milestone to see the code as it was at that specific lesson.
+
+### 1. View all versions
+```bash
+git tag
+```
+
+### 2. Switch to a specific version
+To "go back in time" to a specific lesson, use the checkout command:
+```bash
+# Example: Switch to Version 1 (The Monolith)
+git checkout v1-monolith
+
+# Example: Switch to Version 5 (Relational Data)
+git checkout v5-relations
+```
+
+### 3. Work on Exercises
+When you switch to a tag, you are in a "detached HEAD" state. If you want to save your work while doing the exercises, it's best to create a new branch from that tag:
+```bash
+# Example: Create a working branch for Lesson 3
+git checkout -b my-lesson-3-work v3-helpers
+```
+
+### 4. Return to the latest version
+```bash
+git checkout master
+```
+
+---
+
 ## 🛠 Tech Stack
 
 *   **Language**: PHP 8.2+
