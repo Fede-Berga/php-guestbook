@@ -1,0 +1,23 @@
+# PHP Guestbook Security Configuration
+
+# 1. Prevent Directory Listing
+Options -Indexes
+
+# 2. Protect Sensitive Directories
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^database/ - [F,L]
+    RewriteRule ^docs/ - [F,L]
+    RewriteRule ^\.devcontainer/ - [F,L]
+</IfModule>
+
+# 3. Security Headers (Fallback for non-PHP files)
+<IfModule mod_headers.c>
+    Header set X-Frame-Options "DENY"
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# 4. Limit Request Size (Prevent large payload attacks)
+LimitRequestBody 524288

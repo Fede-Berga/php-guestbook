@@ -2,8 +2,11 @@
 require_once 'helpers.php';
 require_once 'Database.php';
 require_once 'Auth.php';
+require_once 'Security.php';
 
+Security::setSecureSessionConfig();
 session_start();
+Security::setSecurityHeaders();
 
 if (Auth::isLoggedIn()) {
     header('Location: index.php');
@@ -15,6 +18,10 @@ $username = '';
 $email = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!Security::validateCsrfToken($_POST['csrf_token'] ?? null)) {
+        die('CSRF token validation failed.');
+    }
+
     $username = trim($_POST['username'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
@@ -32,7 +39,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         $db = Database::getConnection();
         
-        // Check if user exists
         $stmt = $db->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
         $stmt->execute([$username, $email]);
         if ($stmt->fetch()) {
@@ -61,6 +67,8 @@ include 'views/header.php';
     <?php endif; ?>
 
     <form method="POST" novalidate>
+        <input type="hidden" name="csrf_token" value="<?php echo Security::generateCsrfToken(); ?>">
+        
         <div class="form-group">
             <label for="username">Username:</label>
             <input type="text" name="username" id="username" value="<?php echo e($username); ?>">

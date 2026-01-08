@@ -1,28 +1,33 @@
 <?php
 /**
- * PHP Guestbook - Version 7: Authentication
+ * PHP Guestbook - Version 8: Security Hardening
  * 
- * Improvements:
- * - User Registration & Login.
- * - Password Hashing (BCRYPT/Argon2).
- * - Session Management & Security.
- * - Relational Ownership (Entries linked to Users).
+ * Final Professional Version:
+ * - CSRF Protection.
+ * - Security Headers.
+ * - Secure Session Cookies.
+ * - Input Validation & Output Escaping (Strict).
  */
 
 require_once 'helpers.php';
 require_once 'Database.php';
 require_once 'Auth.php';
+require_once 'Security.php';
 
+// Configure secure session before starting
+Security::setSecureSessionConfig();
 session_start();
+
+// Set security headers
+Security::setSecurityHeaders();
 
 $start_time = microtime(true);
 const MAX_MESSAGE_LENGTH = 150;
 $db = Database::getConnection();
 
-// 1. Handle Actions (Delete/Feature) - Restricted to Admin or Owner
+// 1. Handle Actions (Restrict to logged-in users)
 if (isset($_GET['toggle_feature'])) {
     $id = (int)$_GET['toggle_feature'];
-    // In v7, we simulate admin as any logged-in user for demonstration
     if (Auth::isLoggedIn()) {
         $db->prepare("UPDATE entries SET is_featured = NOT is_featured WHERE id = ?")->execute([$id]);
     }
@@ -30,13 +35,18 @@ if (isset($_GET['toggle_feature'])) {
     exit;
 }
 
-// 2. Handle Form Submission
+// 2. Handle Form Submission with CSRF check
 $errors = [];
 $name = Auth::isLoggedIn() ? Auth::getUsername() : '';
-$email = ''; // We could fetch this from User table if logged in
+$email = '';
 $message = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // CSRF Validation
+    if (!Security::validateCsrfToken($_POST['csrf_token'] ?? null)) {
+        die('CSRF token validation failed.');
+    }
+
     $name = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $message = trim($_POST['message'] ?? '');
@@ -56,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// 3. Sorting Logic
+// 3. Sorting logic
 $allowed_sorts = ['newest', 'oldest', 'featured'];
 $sort = $_GET['sort'] ?? 'newest';
 if (!in_array($sort, $allowed_sorts)) $sort = 'newest';
@@ -65,64 +75,56 @@ $order_by = "entries.created_at DESC";
 if ($sort === 'oldest') $order_by = "entries.created_at ASC";
 if ($sort === 'featured') $order_by = "is_featured DESC, entries.created_at DESC";
 
-// 4. Fetch entries with optional User Join
 $query = "SELECT entries.*, users.username FROM entries 
           LEFT JOIN users ON entries.user_id = users.id 
           ORDER BY $order_by";
 $entries = $db->query($query)->fetchAll();
 
-$page_title = 'Guestbook v7';
+$page_title = 'Secure Guestbook';
 include 'views/header.php';
 ?>
 
-    <p><em>(Authentication & Session Security)</em></p>
+    <p><em>(Version 8: Security Hardened)</em></p>
 
     <?php if (isset($_GET['success'])): ?>
-        <div class="alert">Successfully posted your message!</div>
+        <div class="alert">Successfully posted!</div>
     <?php endif; ?>
 
-    <?php if (!Auth::isLoggedIn()): ?>
-        <div class="alert" style="background: #e7f3ff; color: #0c5460; border-color: #bee5eb;">
-            💡 <strong>Tip:</strong> <a href="login.php">Login</a> to have your entries linked to your profile!
+    <?php if (Auth::isLoggedIn()): ?>
+        <form method="POST" novalidate id="guestbook-form">
+            <!-- CSRF Token -->
+            <input type="hidden" name="csrf_token" value="<?php echo Security::generateCsrfToken(); ?>">
+            
+            <div class="form-group">
+                <label for="name">Display Name:</label>
+                <input type="text" name="name" id="name" value="<?php echo e($name); ?>">
+            </div>
+            <div class="form-group">
+                <label for="email">Contact Email:</label>
+                <input type="email" name="email" id="email" value="<?php echo e($email); ?>">
+            </div>
+            <div class="form-group">
+                <label for="message">Message:</label>
+                <textarea name="message" id="message" rows="4"><?php echo e($message); ?></textarea>
+                <div id="char-counter" style="text-align: right; font-size: 0.8em; color: #666;"><span id="chars-used">0</span> / <?php echo MAX_MESSAGE_LENGTH; ?></div>
+            </div>
+            <button type="submit">Post Entry</button>
+        </form>
+    <?php else: ?>
+        <div class="alert" style="background: #f8d7da; color: #721c24; border-color: #f5c6cb;">
+            Please <a href="login.php">Login</a> or <a href="register.php">Register</a> to post messages.
         </div>
     <?php endif; ?>
-
-    <form method="POST" novalidate id="guestbook-form">
-        <div class="form-group">
-            <label for="name">Display Name:</label>
-            <input type="text" name="name" id="name" value="<?php echo e($name); ?>" class="<?php echo isset($errors['name']) ? 'error' : ''; ?>">
-            <?php if (isset($errors['name'])): ?><span class="error-msg"><?php echo e($errors['name']); ?></span><?php endif; ?>
-        </div>
-
-        <div class="form-group">
-            <label for="email">Contact Email:</label>
-            <input type="email" name="email" id="email" value="<?php echo e($email); ?>" class="<?php echo isset($errors['email']) ? 'error' : ''; ?>">
-            <?php if (isset($errors['email'])): ?><span class="error-msg"><?php echo e($errors['email']); ?></span><?php endif; ?>
-        </div>
-
-        <div class="form-group">
-            <label for="message">Message:</label>
-            <textarea name="message" id="message" rows="4" class="<?php echo isset($errors['message']) ? 'error' : ''; ?>"><?php echo e($message); ?></textarea>
-            <div id="char-counter" style="text-align: right; font-size: 0.8em; color: #666;"><span id="chars-used">0</span> / <?php echo MAX_MESSAGE_LENGTH; ?></div>
-            <?php if (isset($errors['message'])): ?><span class="error-msg"><?php echo e($errors['message']); ?></span><?php endif; ?>
-        </div>
-
-        <button type="submit">Post Entry</button>
-    </form>
 
     <hr>
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h2>Recent Entries</h2>
-        <form method="GET" style="display: flex; align-items: center; gap: 10px;">
-            <input type="hidden" name="sort" value="<?php echo e($sort); ?>">
-            <label for="sort-select" style="margin: 0;">Sort by:</label>
-            <select id="sort-select" onchange="window.location.href='?sort=' + this.value">
-                <option value="newest" <?php echo $sort === 'newest' ? 'selected' : ''; ?>>Newest First</option>
-                <option value="oldest" <?php echo $sort === 'oldest' ? 'selected' : ''; ?>>Oldest First</option>
-                <option value="featured" <?php echo $sort === 'featured' ? 'selected' : ''; ?>>Featured First</option>
-            </select>
-        </form>
+        <select onchange="window.location.href='?sort=' + this.value">
+            <option value="newest" <?php echo $sort === 'newest' ? 'selected' : ''; ?>>Newest</option>
+            <option value="oldest" <?php echo $sort === 'oldest' ? 'selected' : ''; ?>>Oldest</option>
+            <option value="featured" <?php echo $sort === 'featured' ? 'selected' : ''; ?>>Featured</option>
+        </select>
     </div>
 
     <div id="entries">
@@ -132,36 +134,30 @@ include 'views/header.php';
                     <?php if ($entry['is_featured']): ?>
                         <span style="background: #ffc107; color: #000; padding: 2px 6px; border-radius: 3px; font-size: 0.7em; font-weight: bold; margin-right: 5px;">FEATURED</span>
                     <?php endif; ?>
-                    
                     <strong><?php echo e($entry['name']); ?></strong> 
-                    <?php if ($entry['username']): ?>
-                        <span style="color: #007bff; font-size: 0.9em;">(@<?php echo e($entry['username']); ?>)</span>
-                    <?php endif; ?>
-                    
+                    <?php if ($entry['username']): ?><small>(@<?php echo e($entry['username']); ?>)</small><?php endif; ?>
                     • <?php echo format_date($entry['created_at']); ?>
                     
                     <?php if (Auth::isLoggedIn()): ?>
-                        <a href="?toggle_feature=<?php echo $entry['id']; ?>&sort=<?php echo $sort; ?>" style="float: right; font-size: 0.8em; color: #999; text-decoration: none;">
-                            <?php echo $entry['is_featured'] ? '★ Unfeature' : '☆ Feature'; ?>
-                        </a>
+                        <a href="?toggle_feature=<?php echo $entry['id']; ?>&sort=<?php echo $sort; ?>" style="float: right; font-size: 0.8em; color: #999; text-decoration: none;">★</a>
                     <?php endif; ?>
                 </div>
-                <div class="entry-content">
-                    <?php echo nl2br(e($entry['message'])); ?>
-                </div>
+                <div class="entry-content"><?php echo nl2br(e($entry['message'])); ?></div>
             </div>
         <?php endforeach; ?>
     </div>
 
     <script>
         const messageArea = document.getElementById('message');
-        const charsUsed = document.getElementById('chars-used');
-        function updateCounter() {
-            charsUsed.textContent = messageArea.value.length;
-            charsUsed.style.color = messageArea.value.length > <?php echo MAX_MESSAGE_LENGTH; ?> ? '#dc3545' : '#666';
+        if (messageArea) {
+            const charsUsed = document.getElementById('chars-used');
+            function updateCounter() {
+                charsUsed.textContent = messageArea.value.length;
+                charsUsed.style.color = messageArea.value.length > <?php echo MAX_MESSAGE_LENGTH; ?> ? '#dc3545' : '#666';
+            }
+            messageArea.addEventListener('input', updateCounter);
+            updateCounter();
         }
-        messageArea.addEventListener('input', updateCounter);
-        updateCounter();
     </script>
 
 <?php include 'views/footer.php'; ?>
