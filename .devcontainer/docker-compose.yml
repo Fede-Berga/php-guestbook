@@ -1,0 +1,15 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: php-app
+    volumes:
+      - ../:/var/www/html:Z
+    ports:
+      - "8080:80"
+    networks:
+      - lamp-network
+
+networks:
+  lamp-network:
