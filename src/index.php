@@ -1,43 +1,76 @@
 <?php
 /**
- * PHP Guestbook - Version 1: The Monolith
+ * PHP Guestbook - Version 2: Validation & UX
  * 
- * This is a "Spaghetti Code" version where everything is in one file.
- * We use $_SESSION to simulate a database (In-Memory Array).
- * 
- * Security Note: This version is INTENTIONALLY VULNERABLE to XSS
- * to demonstrate the importance of output escaping.
+ * Improvements:
+ * - Added email field.
+ * - Server-side validation.
+ * - "Sticky" form inputs (retains data on error).
+ * - Error message handling.
  */
 
-// Start session to store our "database"
 session_start();
 
-// Track page load time (Interactive Task)
+// Track page load time
 $start_time = microtime(true);
 
-// Initialize our in-memory database if it doesn't exist
+// Initialize database
 if (!isset($_SESSION['entries'])) {
     $_SESSION['entries'] = [
         [
             'name' => 'Admin',
-            'message' => 'Welcome to our Guestbook! Version 1 is live.',
+            'email' => 'admin@example.com',
+            'message' => 'Welcome to Version 2! We now have validation.',
             'created_at' => date('Y-m-d H:i:s')
         ]
     ];
 }
 
+// State variables for the form
+$errors = [];
+$name = '';
+$email = '';
+$message = '';
+
 // Handle Form Submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $name = $_POST['name'] ?? 'Anonymous';
-    $message = $_POST['message'] ?? '';
+    // 1. Collect and trim data
+    $name = trim($_POST['name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $message = trim($_POST['message'] ?? '');
 
-    if (!empty($message)) {
-        // Add to "database"
+    // 2. Validation Logic
+    if (empty($name)) {
+        $errors['name'] = 'Name is required.';
+    }
+
+    if (empty($email)) {
+        $errors['email'] = 'Email is required.';
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $errors['email'] = 'Please enter a valid email address.';
+    }
+
+    if (empty($message)) {
+        $errors['message'] = 'Message cannot be empty.';
+    } elseif (strlen($message) < 5) {
+        $errors['message'] = 'Message must be at least 5 characters long.';
+    }
+
+    // 3. If no errors, save and redirect
+    if (empty($errors)) {
         $_SESSION['entries'][] = [
             'name' => $name,
+            'email' => $email,
             'message' => $message,
             'created_at' => date('Y-m-d H:i:s')
         ];
+
+        // Clear values for next time
+        $name = $email = $message = '';
+        
+        // In a real app, we'd redirect here to prevent double-submission:
+        // header('Location: index.php?success=1');
+        // exit;
     }
 }
 ?>
@@ -46,40 +79,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Guestbook v1 - The Monolith</title>
+    <title>Guestbook v2 - Validation & UX</title>
     <style>
         body { font-family: sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; background: #f4f4f4; }
-        .entry { background: #fff; padding: 15px; margin-bottom: 10px; border-left: 5px solid #007BFF; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .entry { background: #fff; padding: 15px; margin-bottom: 10px; border-left: 5px solid #28a745; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .entry-meta { font-size: 0.8em; color: #666; margin-bottom: 5px; }
         .form-group { margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input[type="text"], textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        button { background: #007BFF; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #0056b3; }
+        input[type="text"], input[type="email"], textarea { 
+            width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; 
+        }
+        input.error, textarea.error { border-color: #dc3545; background-color: #fff8f8; }
+        .error-msg { color: #dc3545; font-size: 0.85em; margin-top: 5px; display: block; }
+        button { background: #28a745; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #218838; }
         footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; font-size: 0.9em; color: #777; }
-        .alert { padding: 10px; background: #fff3cd; color: #856404; border: 1px solid #ffeeba; margin-bottom: 20px; border-radius: 4px; }
+        .alert { padding: 10px; background: #d4edda; color: #155724; border: 1px solid #c3e6cb; margin-bottom: 20px; border-radius: 4px; }
     </style>
 </head>
 <body>
 
-    <h1>📝 Guestbook v1</h1>
-    <p><em>(In-Memory Array Mode)</em></p>
+    <h1>📝 Guestbook v2</h1>
+    <p><em>(Validation & User Experience)</em></p>
 
-    <div class="alert">
-        <strong>Security Warning:</strong> This version does not escape output. 
-        Try submitting: <code>&lt;script&gt;alert('XSS')&lt;/script&gt;</code>
-    </div>
+    <?php if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($errors)): ?>
+        <div class="alert">Successfully posted your entry!</div>
+    <?php endif; ?>
 
     <!-- Entry Form -->
-    <form method="POST">
+    <form method="POST" novalidate>
         <div class="form-group">
             <label for="name">Your Name:</label>
-            <input type="text" name="name" id="name" placeholder="John Doe">
+            <input type="text" name="name" id="name" 
+                   value="<?php echo htmlspecialchars($name); ?>" 
+                   class="<?php echo isset($errors['name']) ? 'error' : ''; ?>">
+            <?php if (isset($errors['name'])): ?>
+                <span class="error-msg"><?php echo $errors['name']; ?></span>
+            <?php endif; ?>
         </div>
+
+        <div class="form-group">
+            <label for="email">Email Address:</label>
+            <input type="email" name="email" id="email" 
+                   value="<?php echo htmlspecialchars($email); ?>"
+                   class="<?php echo isset($errors['email']) ? 'error' : ''; ?>">
+            <?php if (isset($errors['email'])): ?>
+                <span class="error-msg"><?php echo $errors['email']; ?></span>
+            <?php endif; ?>
+        </div>
+
         <div class="form-group">
             <label for="message">Message:</label>
-            <textarea name="message" id="message" rows="4" required placeholder="Write something..."></textarea>
+            <textarea name="message" id="message" rows="4" 
+                      class="<?php echo isset($errors['message']) ? 'error' : ''; ?>"><?php echo htmlspecialchars($message); ?></textarea>
+            <?php if (isset($errors['message'])): ?>
+                <span class="error-msg"><?php echo $errors['message']; ?></span>
+            <?php endif; ?>
         </div>
+
         <button type="submit">Post Entry</button>
     </form>
 
@@ -90,17 +147,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php foreach (array_reverse($_SESSION['entries']) as $entry): ?>
             <div class="entry">
                 <div class="entry-meta">
-                    <strong><?php echo $entry['name']; ?></strong> 
+                    <strong><?php echo htmlspecialchars($entry['name']); ?></strong> 
+                    (<?php echo htmlspecialchars($entry['email']); ?>)
                     • <?php echo $entry['created_at']; ?>
                 </div>
                 <div class="entry-content">
-                    <?php 
-                        /**
-                         * VULNERABILITY: Raw output without htmlspecialchars()
-                         * This allows Cross-Site Scripting (XSS).
-                         */
-                        echo $entry['message']; 
-                    ?>
+                    <?php echo nl2br(htmlspecialchars($entry['message'])); ?>
                 </div>
             </div>
         <?php endforeach; ?>
