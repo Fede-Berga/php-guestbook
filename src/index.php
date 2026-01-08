@@ -1,15 +1,17 @@
 <?php
 /**
- * PHP Guestbook - Version 6: Features & Sorting
+ * PHP Guestbook - Version 7: Authentication
  * 
  * Improvements:
- * - "Featured" entry flag.
- * - Dynamic sorting (Newest, Oldest, Featured).
- * - Multi-column ordering in SQL.
+ * - User Registration & Login.
+ * - Password Hashing (BCRYPT/Argon2).
+ * - Session Management & Security.
+ * - Relational Ownership (Entries linked to Users).
  */
 
 require_once 'helpers.php';
 require_once 'Database.php';
+require_once 'Auth.php';
 
 session_start();
 
@@ -17,18 +19,22 @@ $start_time = microtime(true);
 const MAX_MESSAGE_LENGTH = 150;
 $db = Database::getConnection();
 
-// 1. Handle "Feature" Toggle Action (Simulated Admin)
+// 1. Handle Actions (Delete/Feature) - Restricted to Admin or Owner
 if (isset($_GET['toggle_feature'])) {
     $id = (int)$_GET['toggle_feature'];
-    // Invert the boolean value in DB
-    $db->prepare("UPDATE entries SET is_featured = NOT is_featured WHERE id = ?")->execute([$id]);
+    // In v7, we simulate admin as any logged-in user for demonstration
+    if (Auth::isLoggedIn()) {
+        $db->prepare("UPDATE entries SET is_featured = NOT is_featured WHERE id = ?")->execute([$id]);
+    }
     header('Location: index.php?sort=' . ($_GET['sort'] ?? 'newest'));
     exit;
 }
 
 // 2. Handle Form Submission
 $errors = [];
-$name = $email = $message = '';
+$name = Auth::isLoggedIn() ? Auth::getUsername() : '';
+$email = ''; // We could fetch this from User table if logged in
+$message = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
@@ -42,44 +48,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     elseif (mb_strlen($message) > MAX_MESSAGE_LENGTH) $errors['message'] = 'Too long.';
 
     if (empty($errors)) {
-        $stmt = $db->prepare("INSERT INTO entries (name, email, message) VALUES (?, ?, ?)");
-        $stmt->execute([$name, $email, $message]);
+        $user_id = Auth::getUserId();
+        $stmt = $db->prepare("INSERT INTO entries (user_id, name, email, message) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$user_id, $name, $email, $message]);
         header('Location: index.php?success=1');
         exit;
     }
 }
 
-// 3. Handle Sorting Logic
+// 3. Sorting Logic
 $allowed_sorts = ['newest', 'oldest', 'featured'];
 $sort = $_GET['sort'] ?? 'newest';
 if (!in_array($sort, $allowed_sorts)) $sort = 'newest';
 
-$order_by = "created_at DESC";
-if ($sort === 'oldest') $order_by = "created_at ASC";
-if ($sort === 'featured') $order_by = "is_featured DESC, created_at DESC";
+$order_by = "entries.created_at DESC";
+if ($sort === 'oldest') $order_by = "entries.created_at ASC";
+if ($sort === 'featured') $order_by = "is_featured DESC, entries.created_at DESC";
 
-// Fetch entries with dynamic sort
-$entries = $db->query("SELECT * FROM entries ORDER BY $order_by")->fetchAll();
+// 4. Fetch entries with optional User Join
+$query = "SELECT entries.*, users.username FROM entries 
+          LEFT JOIN users ON entries.user_id = users.id 
+          ORDER BY $order_by";
+$entries = $db->query($query)->fetchAll();
 
-$page_title = 'Guestbook v6';
+$page_title = 'Guestbook v7';
 include 'views/header.php';
 ?>
 
-    <p><em>(Features & Dynamic Sorting)</em></p>
+    <p><em>(Authentication & Session Security)</em></p>
 
     <?php if (isset($_GET['success'])): ?>
-        <div class="alert">Successfully posted!</div>
+        <div class="alert">Successfully posted your message!</div>
+    <?php endif; ?>
+
+    <?php if (!Auth::isLoggedIn()): ?>
+        <div class="alert" style="background: #e7f3ff; color: #0c5460; border-color: #bee5eb;">
+            💡 <strong>Tip:</strong> <a href="login.php">Login</a> to have your entries linked to your profile!
+        </div>
     <?php endif; ?>
 
     <form method="POST" novalidate id="guestbook-form">
         <div class="form-group">
-            <label for="name">Your Name:</label>
+            <label for="name">Display Name:</label>
             <input type="text" name="name" id="name" value="<?php echo e($name); ?>" class="<?php echo isset($errors['name']) ? 'error' : ''; ?>">
             <?php if (isset($errors['name'])): ?><span class="error-msg"><?php echo e($errors['name']); ?></span><?php endif; ?>
         </div>
 
         <div class="form-group">
-            <label for="email">Email:</label>
+            <label for="email">Contact Email:</label>
             <input type="email" name="email" id="email" value="<?php echo e($email); ?>" class="<?php echo isset($errors['email']) ? 'error' : ''; ?>">
             <?php if (isset($errors['email'])): ?><span class="error-msg"><?php echo e($errors['email']); ?></span><?php endif; ?>
         </div>
@@ -99,8 +115,9 @@ include 'views/header.php';
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h2>Recent Entries</h2>
         <form method="GET" style="display: flex; align-items: center; gap: 10px;">
-            <label for="sort" style="margin: 0;">Sort by:</label>
-            <select name="sort" id="sort" onchange="this.form.submit()">
+            <input type="hidden" name="sort" value="<?php echo e($sort); ?>">
+            <label for="sort-select" style="margin: 0;">Sort by:</label>
+            <select id="sort-select" onchange="window.location.href='?sort=' + this.value">
                 <option value="newest" <?php echo $sort === 'newest' ? 'selected' : ''; ?>>Newest First</option>
                 <option value="oldest" <?php echo $sort === 'oldest' ? 'selected' : ''; ?>>Oldest First</option>
                 <option value="featured" <?php echo $sort === 'featured' ? 'selected' : ''; ?>>Featured First</option>
@@ -115,12 +132,19 @@ include 'views/header.php';
                     <?php if ($entry['is_featured']): ?>
                         <span style="background: #ffc107; color: #000; padding: 2px 6px; border-radius: 3px; font-size: 0.7em; font-weight: bold; margin-right: 5px;">FEATURED</span>
                     <?php endif; ?>
+                    
                     <strong><?php echo e($entry['name']); ?></strong> 
+                    <?php if ($entry['username']): ?>
+                        <span style="color: #007bff; font-size: 0.9em;">(@<?php echo e($entry['username']); ?>)</span>
+                    <?php endif; ?>
+                    
                     • <?php echo format_date($entry['created_at']); ?>
                     
-                    <a href="?toggle_feature=<?php echo $entry['id']; ?>&sort=<?php echo $sort; ?>" style="float: right; font-size: 0.8em; color: #999; text-decoration: none;">
-                        <?php echo $entry['is_featured'] ? '★ Unfeature' : '☆ Feature'; ?>
-                    </a>
+                    <?php if (Auth::isLoggedIn()): ?>
+                        <a href="?toggle_feature=<?php echo $entry['id']; ?>&sort=<?php echo $sort; ?>" style="float: right; font-size: 0.8em; color: #999; text-decoration: none;">
+                            <?php echo $entry['is_featured'] ? '★ Unfeature' : '☆ Feature'; ?>
+                        </a>
+                    <?php endif; ?>
                 </div>
                 <div class="entry-content">
                     <?php echo nl2br(e($entry['message'])); ?>
