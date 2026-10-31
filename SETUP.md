@@ -18,8 +18,8 @@ This project comes with a pre-configured DevContainer. This ensures you have the
 
 1.  **Clone the Repository**
     ```bash
-    git clone <repository-url>
-    cd php-db-integration
+    git clone https://github.com/Fede-Berga/php-guestbook.git
+    cd php-guestbook
     ```
 
 2.  **Open in VS Code**
@@ -35,7 +35,7 @@ This project comes with a pre-configured DevContainer. This ensures you have the
 
 4.  **Verify Connection**
     Once the terminal opens in VS Code, you are inside the Linux container.
-    Open your browser to `http://localhost:8080`. You should see the application (or a "Success" message if on the starting branch).
+    Open your browser to `http://localhost:8080/src/` (the repository root is the web root). You should see the application; from Version 5 on, import the database schema first (see Database Migrations below).
 
 ### Database Management
 
@@ -60,26 +60,29 @@ If you prefer to run PHP locally:
     Create a database named `my_database`.
 
 3.  **Configure Application**
-    You may need to edit `src/config/database.php` (in later versions) or the connection string in `index.php` (in early versions) to match your local database credentials (e.g., host might be `localhost` or `127.0.0.1` instead of `db`).
+    From Version 5 on, the connection settings are in `src/Database.php`: edit them to match your local database credentials (e.g., host might be `localhost` or `127.0.0.1` instead of `db`). Versions 1 to 4 keep the entries in the session and need no database.
 
 4.  **Start Server**
     You can use the built-in PHP server:
     ```bash
-    php -S localhost:8080 -t public/
+    php -S localhost:8080 -t src
     ```
-    *(Note: The document root `-t` may vary depending on the specific version you are working on).*
+    Then open `http://localhost:8080`.
 
 ---
 
 ## 🗄️ Database Migrations
 
-Each version contains SQL scripts in `database/schema/`.
+From Version 5 on, the SQL scripts are in `database/schema/`: `001_initial_schema.sql` (Version 5) and `002_add_featured_column.sql` (Version 6).
 
-**To import a schema via command line (Docker):**
+**To import a schema via command line (Docker)**, run these from a terminal on your computer, not inside the container:
 
 ```bash
-# Example for Version 1
-cat database/schema/001_create_entries_table.sql | docker exec -i mysql-db mysql -u user -ppassword my_database
+# Version 5 and later
+cat database/schema/001_initial_schema.sql | docker exec -i mysql-db mysql -u user -ppassword my_database
+
+# Version 6 and later
+cat database/schema/002_add_featured_column.sql | docker exec -i mysql-db mysql -u user -ppassword my_database
 ```
 
 *Note: In the interactive exercises, you will often be writing the SQL queries yourself before running these scripts.*
