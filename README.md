@@ -154,4 +154,7 @@ This project is intended for educational purposes. Issues and Pull Requests fixi
 
 ## 📄 License
 
-MIT License.
+The code and the lesson material are licensed separately:
+
+*   The lesson material (the lessons, exercises and solutions in [`docs/`](docs/) and the teaching guide [`TEACHING.md`](TEACHING.md)) is licensed under [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0), see [`LICENSE-docs`](LICENSE-docs). You can reuse and adapt it, also in your own classes, as long as you credit Federico Bergamini.
+*   Everything else, including the code in `src/`, `database/` and `.devcontainer/`, is released under the [MIT License](LICENSE).
